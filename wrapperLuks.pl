@@ -1,33 +1,20 @@
 #!/usr/bin/env perl 
-#===============================================================================
-#
-#         FILE: wrapperLuks.pl
-#
-#        USAGE: ./wrapperLuks.pl  
-#
-#  DESCRIPTION: 
-#
-#      OPTIONS: ---
-# REQUIREMENTS: ---
-#         BUGS: ---
-#        NOTES: ---
-#       AUTHOR: corealugly, 
-# ORGANIZATION: 
-#      VERSION: 1.0
-#      CREATED: 08/08/2017 11:01:01 PM
-#     REVISION: ---
-#===============================================================================
-
 use strict;
 use warnings;
 use utf8;
 use Cwd 'abs_path';
 require 'func.pl';
-use Sudo;
+use boolean;
+
+my $view = true;
+my $containerName = "def." . time();
+my $containerSize = "256";
+my $cipher = "aes-xts-plain64";
+my $keySize = "512";
 
 
-my $user = getpwuid( $< );
-print "\$user = $user\n";
+my $userName = getpwuid( $< );
+print "\$user = $userName\n";
 
 my $absPath = abs_path($0);
 print "ABS path: $absPath\n";
@@ -35,5 +22,5 @@ print "ABS path: $absPath\n";
 #my $uid   = $<;
 #print "\$uid = $uid\n";
 
-dmsetupInfo();
-
+#dmsetupInfo();
+cryptsetupInfo();
