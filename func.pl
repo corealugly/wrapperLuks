@@ -9,7 +9,7 @@ use Cwd 'abs_path';
 use File::Basename;
 use Data::Dumper;
 use boolean;
-use File::Path qw(make_path remove_tree);
+use File::Path qw(make_path mkpath remove_tree);
 
 use Log::Any qw($log);
 use Log::Any::Adapter ('Stdout');
@@ -44,26 +44,28 @@ sub createStructDir($) {
 }
 # }}}
 
-# {{{ createStructDirV2   NEED TEST
+# {{{ createStructDirV2 
 sub createStructDirV2() {
-    my($keyFolder, $containerPrivateFolder, $mountPrivateFolder);
-    $keyFolder = "~/.keys";
-    $containerPrivateFolder = "~/.private";
-    $mountPrivateFolder = "~/private";
+    my($keyFolder, $containerPrivateFolder, $mountPrivateFolder, $homeDir);
+    $homeDir =  $ENV{'HOME'};
+    print "homedir: " . $homeDir . "\n"; 
+    $keyFolder = $homeDir . "/.keys";
+    $containerPrivateFolder = $homeDir . "/.private";
+    $mountPrivateFolder = $homeDir . "/private";
 
     if (! -d $keyFolder ) { 
+        my @created = make_path($keyFolder, {  verbose => 0, mode => 0700 });
         $log->info("create folder keys: $keyFolder");
-        my @created = mkpath($keyFolder, 1, 0700);
     }
     if (! -d $containerPrivateFolder ) {
+        my @created = make_path($containerPrivateFolder, { verbose => 0, mode => 0700 });
         $log->info("create folder containers: $containerPrivateFolder ");
-        my @created = mkpath($containerPrivateFolder, 1, 0700);
     }
     if (! -d $mountPrivateFolder ) { 
+        my @created = make_path($mountPrivateFolder, { verbose => 0, mode => 0700 });
         $log->info("create folder private: $mountPrivateFolder");
-        my @created = mkpath($mountPrivateFolder, 1, 0700);
     }
-    return $keyFolder, $containerPrivateFolder, $mountPrivateFolder;
+    return($keyFolder, $containerPrivateFolder, $mountPrivateFolder);
 }
 # }}}
 
@@ -108,7 +110,7 @@ sub dmsetupInfo(;$) {
 }
 # }}}
 
-# {{{ createFileContainer  NEED TEST
+# {{{ createFileContainer  
 sub createFileContainer($$$;$) {
     my($containerPrivateFolder, $containerName, $containerSize, $bs) = @_;
     if ( not defined $bs ) { $bs = "1M" }
@@ -116,53 +118,76 @@ sub createFileContainer($$$;$) {
     if ( -d $containerPrivateFolder ) {
         my $containerPath = $containerPrivateFolder . "/" . $containerName . ".crt";
         $containerPath =~ s/\/\//\//g;
-        print "containerPath: " . $containerPath;
+        print "containerPath: " . $containerPath . "\n";
         if ( ! -e $containerPath ) { 
-            my @outPut = `dd if=/dev/urandom of=$containerPath bs=$bs count=$containerSize status=progres`;
-            print Dumper \@outPut;
+            my @outPut = `dd if=/dev/urandom of=$containerPath bs=$bs count=$containerSize status=progress`;
+            #print Dumper \@outPut;
             return $containerPath;
-        } else { $log->error("containerPath is exist: $containerPath"); }
-    } else { $log->error("containerPrivateFolder not exist: $containerPrivateFolder"); }
+        } else { 
+            $log->error("containerPath is exist: $containerPath");
+            return $containerPath;
+          }
+    } else { 
+        $log->error("containerPrivateFolder not exist: $containerPrivateFolder"); }
+        return -1;
 }
 # }}}
 
-# {{{ createKeyFile NEED TEST
+# {{{ createKeyFile 
 sub createKeyFile($$$) {
     my($keyFolder, $containerName, $keySize) = @_;
 
     if ( -d $keyFolder ) {
         my $keyPath = $keyFolder . "/" . $containerName . ".key";
         $keyPath =~ s/\/\//\//g;
-        print "keyPath: " . $keyPath;
+        print "keyPath: " . $keyPath . "\n";
         if ( ! -e $keyPath ) { 
-            my @outPut = `dd if=/dev/urandom of=$keyPath bs=${keySize} count=1 status=progres`;
-            print Dumper \@outPut;
+            my @outPut = `dd if=/dev/urandom of=$keyPath bs=${keySize} count=1 status=progress`;
+            #print Dumper \@outPut;
             return $keyPath;
-        } else { $log->error("KeyPath is exist: $keyPath"); }
-    } else { $log->error("keyFolder not exist: $keyFolder"); }
+        } else { 
+            $log->error("KeyPath is exist: $keyPath");
+            return $keyPath; 
+          }
+    } else { 
+        $log->error("keyFolder not exist: $keyFolder");
+        return -1;
+      }
    
 }
 # }}}
 
-# {{{ formatLuksDevice NEED TEST
+# {{{ formatLuksDevice 
 sub formatLuksDevice($$$$) {
     my($containerPath, $keyPath, $cipher, $keySize) = @_;
 
     if ( -e $containerPath ) {
         if ( -e $keyPath ) { 
-            my @outPut = `cryptsetup luksFormat $containerPath -d $keyPath -c $cipher -s $keySize`;
-        } else { $log->error("keyPath not exist: $keyPath"); }
-    } else { $log->error("containerPath not exist: $containerPath");}
+            my @outPut = `env cryptsetup luksFormat $containerPath -d $keyPath -c $cipher -s $keySize --batch-mode`;
+            #print Dumper \@outPut;
+            return $?;
+        } else { 
+            $log->error("keyPath not exist: $keyPath");
+            return -1;
+          }
+    } else { 
+        $log->error("containerPath not exist: $containerPath");
+        return -1;
+      }
 }
 # }}}
 
 # {{{ cryptsetupInfo 
 sub cryptsetupInfo(;$) {
     my($Name) = @_;
-    my(%ret,$lllv);
+    my(%ret, %mpdc, $lllv);
 
-    $lllv = dmsetupInfo();
-    my %mpdc;
+    if ( ! defined $Name ) {
+        $lllv = dmsetupInfo();
+    } else { 
+        my %tmp = ( $Name => undef, );
+        $lllv = \%tmp;
+    }
     foreach my $key (keys %$lllv) {
         my @outPut = `cryptsetup status $key`;
         if ($? == 0 ) { 
@@ -186,7 +211,7 @@ sub cryptsetupInfo(;$) {
 }
 # }}}
 
-# {{{ openLuksDevice NEED TEST
+# {{{ openLuksDevice 
 sub openLuksDevice($$$) {
     my($containerName, $containerPath, $keyPath) = @_;
 
@@ -194,31 +219,44 @@ sub openLuksDevice($$$) {
         if ( -e $keyPath ) { 
             #my($containerName, $directories, $suffix) = fileparse($containerPath);
             my @outPut = `cryptsetup luksOpen $containerPath -d $keyPath  $containerName`;
-        } else { $log->error("keyPath not exist: $keyPath"); }
-    } else { $log->error("containerPath not exist: $containerPath");}
+            return $?;
+        } else { 
+            $log->error("keyPath not exist: $keyPath");
+            return -1;
+        }
+    } else { 
+        $log->error("containerPath not exist: $containerPath");
+        return -1;
+    }
 }
 # }}}
 
-# {{{ createFsDevice  NEED TEST
+# {{{ createFsDevice
 sub createFsDevice($$) {
     my($fsName,$pathDevice) = @_;
     my $fsComm;
     my %fsHash = (                 # ADD new FS with params
-        "reiserfs" => "mkreiserfs",
+        "reiserfs" => "mkreiserfs -q",
         "ext4"     => "mkfs.ext4"
     );
 
     if ( -e $pathDevice ) {
         $fsComm = $fsHash{$fsName};
-        if ( ! defined $fsComm) { $log->error("fs not exist: $fsComm"); return -1;  }
-    } else { $log->error("device not exist: $pathDevice"); return -1; }
- 
-    my @outPut = `env $fsComm $pathDevice`;
-    return $?;
+        if ( defined $fsComm) { 
+            my @outPut = `env $fsComm $pathDevice`;
+            return $?;
+        } else { 
+            $log->error("fs not exist: $fsComm");
+            return -1;
+        }
+    } else { 
+        $log->error("device not exist: $pathDevice");
+        return -1;
+    }
 }
 # }}}
 
-# {{{ mountFsDevice  NEED TEST
+# {{{ mountFsDevice 
 sub mountFsDevice($$;$) {
     my($pathDevice, $mountPoint, $userName) = @_;
     my @outPut;
@@ -231,8 +269,14 @@ sub mountFsDevice($$;$) {
                 return $?;
             }
             return $?;
-        } else { $log->error("mount point not exist: $mountPoint"); return -1; }
-    } else { $log->error("device not exist: $pathDevice"); return -1; }
+        } else { 
+            $log->error("mount point not exist: $mountPoint");
+            return -1;
+        }
+    } else { 
+        $log->error("device not exist: $pathDevice");
+        return -1;
+    }
 }
 # }}}
 
