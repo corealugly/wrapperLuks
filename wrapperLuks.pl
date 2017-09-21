@@ -16,7 +16,6 @@ my $containerSize = "50";
 my $cipher = "aes-xts-plain64";
 my $keySize = "512";
 
-
 my $user = getpwuid( $< );
 print "\$user = $user\n";
 
@@ -32,6 +31,12 @@ print "ABS path: $absPath\n";
 #dmsetupInfo();
 #cryptsetupInfo();
 #-------------
+
+#if (closeLuksDevice($containerName)) {
+#    $log->info("close Luks Device: $containerName");
+#}
+#exit(1);
+
 my($keyFolder, $containerPrivateFolder, $mountPrivateFolder) =  createStructDirV2();
 #требуется проверка на существование контейнера
 my($containerPath) = createFileContainer($containerPrivateFolder, $containerName, $containerSize);

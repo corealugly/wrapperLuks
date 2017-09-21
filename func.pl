@@ -76,7 +76,7 @@ sub dmsetupInfo(;$) {
     my($Name) = @_;
     my(%ret,@listName);
     #if (undef $Name) {  exit(0); }
-    my(@outPut) = `dmsetup info $Name`;
+    my(@outPut) = `sudo dmsetup info $Name`;
     foreach my $val (@outPut) {
         my @spl = split(/:/,$val);
         if ( $spl[0] =~ /[nN][aA][mM][eE]/ ) {
@@ -86,7 +86,7 @@ sub dmsetupInfo(;$) {
     }
     undef @outPut;
     foreach my $name (@listName) {
-        @outPut = `dmsetup info $name`;
+        @outPut = `sudo dmsetup info $name`;
         pop @outPut;
         my %lllv;
         foreach my $val2 (@outPut) {
@@ -169,7 +169,7 @@ sub formatLuksDevice($$$$) {
 
     if ( -e $containerPath ) {
         if ( -e $keyPath ) { 
-            my @outPut = `env cryptsetup luksFormat $containerPath -d $keyPath -c $cipher -s $keySize --batch-mode`;
+            my @outPut = `sudo env cryptsetup luksFormat $containerPath -d $keyPath -c $cipher -s $keySize --batch-mode`;
             #print Dumper \@outPut;
             if (! $?) { return true; } else { return false; }  
         } else { 
@@ -195,7 +195,7 @@ sub cryptsetupInfo(;$) {
         $lllv = \%tmp;
     }
     foreach my $key (keys %$lllv) {
-        my @outPut = `cryptsetup status $key`;
+        my @outPut = `sudo cryptsetup status $key`;
         if ($? == 0 ) { 
             LINE: foreach my $val (@outPut) {
                 chomp $val;
@@ -217,33 +217,13 @@ sub cryptsetupInfo(;$) {
 }
 # }}}
 
-# {{{ openLuksDevice 
-sub openLuksDevice($$$) {
-    my($containerName, $containerPath, $keyPath) = @_;
-
-    if ( -e $containerPath ) {
-        if ( -e $keyPath ) { 
-            #my($containerName, $directories, $suffix) = fileparse($containerPath);
-            my @outPut = `cryptsetup luksOpen $containerPath -d $keyPath  $containerName`;
-            if (! $?) { return true; } else { return false; }  
-        } else { 
-            $log->error("keyPath not exist: $keyPath");
-            return false;
-        }
-    } else { 
-        $log->error("containerPath not exist: $containerPath");
-        return false;
-    }
-}
-# }}}
-
 # {{{ createFsDevice
 sub createFsDevice($$) {
     my($fsName,$pathDevice) = @_;
     my $fsComm;
     my %fsHash = (                 # ADD new FS with params
-        "reiserfs" => "mkreiserfs -q",
-        "ext4"     => "mkfs.ext4"
+        "reiserfs" => "sudo mkreiserfs -q",
+        "ext4"     => "sudo mkfs.ext4"
     );
 
     if ( -e $pathDevice ) {
@@ -262,14 +242,14 @@ sub createFsDevice($$) {
 }
 # }}}
 
-# {{{ mountFsDevice 
+# {{{ mountFsDevice     #need revision
 sub mountFsDevice($$;$) {
     my($pathDevice, $mountPoint, $userName) = @_;
     my @outPut;
 
     if ( -e $pathDevice ) {
         if ( -d $mountPoint ) {
-             @outPut = `env mount $pathDevice $mountPoint`;
+             @outPut = `sudo env mount $pathDevice $mountPoint`;
             if ( $? == 0 and defined $userName) {
                 @outPut = `chown -hR $userName:$userName $mountPoint`;
                 #for inverting bash exit to perl exit status 
@@ -289,16 +269,81 @@ sub mountFsDevice($$;$) {
 }
 # }}}
 
-# {{{ testMountDevice   #need revision
-sub testMountDevice($) { 
+# {{{ findMountDevice   #need revision
+sub findMountDevice($) { 
     my($containerName) = @_;
     my $containerInfo =  dmsetupInfo($containerName); 
-    open (my $fd, '<', '/proc/mounts') or die "Could not open file '/proc/mount' $!";
-    while (<$fd>)  {
-        if ( $_ =~ /$containerInfo->{$containerName}{'mapperPath'}/) {
-            my @spl = split(/ /, $_);
-            return $spl[1];
+    my $mountStruct = getMountStruct();
+    foreach my $val (@$mountStruct) {
+        if ( $val->{'part'} =~ /$containerInfo->{$containerName}{'mapperPath'}/) {
+            return $val;
         }
+    }
+    return false;
+}
+# }}}
+
+# {{{ getMountStruct
+sub getMountStruct() {
+    open (my $fd, '<', '/proc/mounts') or die "Could not open file '/proc/mount' $!";
+    my(@ret);
+    while (<$fd>)  {
+        my @spl = split(/ /, $_);
+        foreach my $val (@spl) { chomp $val; }
+        my %mountStruct;
+        $mountStruct{'part'} = $spl[0];
+        $mountStruct{'point'}   = $spl[1];
+        $mountStruct{'fs'}   = $spl[2];
+        my @spl2 = split(/,/,$spl[3]); 
+        $mountStruct{'options'}   = \@spl2;
+        $mountStruct{'dump'} = $spl[4];
+        $mountStruct{'fsck'} = $spl[5];
+        push @ret, \%mountStruct; 
+        }
+    return \@ret;
+}
+# }}}
+
+# {{{ umountFsDevice 
+sub umountFsDevice($) {
+    #path device or mount point
+    my($pathDoMp) = @_;
+    my @outPut = `sudo env umount $pathDoMp`;
+    if (! $?) { return true; } else { return false; }  
+    }
+# }}}
+
+#{{{ closeLuksDevice 
+sub closeLuksDevice($) { 
+    my($containerName) = @_;
+    my $mountDeviceStruct = findMountDevice($containerName);
+    if ($mountDeviceStruct) {
+        if ( ! umountFsDevice($mountDeviceStruct->{'point'})) {
+            $log->error("can not umount device: $mountDeviceStruct->{'part'} mount point: $mountDeviceStruct->{'point'}");
+            return false;
+        }
+    }
+    my @outPut = `sudo env cryptsetup close $containerName`;
+    if (! $?) { return true; } else { return false; }  
+}
+# }}}
+
+# {{{ openLuksDevice 
+sub openLuksDevice($$$) {
+    my($containerName, $containerPath, $keyPath) = @_;
+
+    if ( -e $containerPath ) {
+        if ( -e $keyPath ) { 
+            #my($containerName, $directories, $suffix) = fileparse($containerPath);
+            my @outPut = `sudo cryptsetup luksOpen $containerPath -d $keyPath  $containerName`;
+            if (! $?) { return true; } else { return false; }  
+        } else { 
+            $log->error("keyPath not exist: $keyPath");
+            return false;
+        }
+    } else { 
+        $log->error("containerPath not exist: $containerPath");
+        return false;
     }
 }
 # }}}
