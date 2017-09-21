@@ -251,7 +251,7 @@ sub mountFsDevice($$;$) {
         if ( -d $mountPoint ) {
              @outPut = `sudo env mount $pathDevice $mountPoint`;
             if ( $? == 0 and defined $userName) {
-                @outPut = `chown -hR $userName:$userName $mountPoint`;
+                @outPut = `sudo chown -hR $userName:$userName $mountPoint`;
                 #for inverting bash exit to perl exit status 
                 if (! $?) { return true; } else { return false; }  
                 #return $?;

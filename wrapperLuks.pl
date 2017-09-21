@@ -32,10 +32,10 @@ print "ABS path: $absPath\n";
 #cryptsetupInfo();
 #-------------
 
-#if (closeLuksDevice($containerName)) {
-#    $log->info("close Luks Device: $containerName");
-#}
-#exit(1);
+if (closeLuksDevice($containerName)) {
+    $log->info("close Luks Device: OK -> $containerName");
+}
+exit(1);
 
 my($keyFolder, $containerPrivateFolder, $mountPrivateFolder) =  createStructDirV2();
 #требуется проверка на существование контейнера
@@ -65,6 +65,6 @@ if ( ! -d $mountPoint ) {
     $log->info("create mount point: $mountPoint");
 }
 
-if (mountFsDevice($cryptNodeInfo->{$containerName}{"mapperPath"}, $mountPoint)) {
+if (mountFsDevice($cryptNodeInfo->{$containerName}{"mapperPath"}, $mountPoint, $user)) {
     $log->info("mountFSstatus: OK");
 }
