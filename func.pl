@@ -289,4 +289,18 @@ sub mountFsDevice($$;$) {
 }
 # }}}
 
+# {{{ testMountDevice   #need revision
+sub testMountDevice($) { 
+    my($containerName) = @_;
+    my $containerInfo =  dmsetupInfo($containerName); 
+    open (my $fd, '<', '/proc/mounts') or die "Could not open file '/proc/mount' $!";
+    while (<$fd>)  {
+        if ( $_ =~ /$containerInfo->{$containerName}{'mapperPath'}/) {
+            my @spl = split(/ /, $_);
+            return $spl[1];
+        }
+    }
+}
+# }}}
+
 true;
