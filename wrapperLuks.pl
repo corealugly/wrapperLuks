@@ -33,50 +33,33 @@ print "ABS path: $absPath\n";
 #cryptsetupInfo();
 #-------------
 my($keyFolder, $containerPrivateFolder, $mountPrivateFolder) =  createStructDirV2();
-
-#print $keyFolder . "\n";
-#print $containerPrivateFolder . "\n";
-#print $mountPrivateFolder . "\n";
-#------------
-
+#требуется проверка на существование контейнера
 my($containerPath) = createFileContainer($containerPrivateFolder, $containerName, $containerSize);
-print "containerPath: " . $containerPath . "\n";
-
-#------------
 
 my($keyPath) = createKeyFile($keyFolder, $containerName, $keySize);
-print "keyPath: " . $keyPath . "\n";
 
-#------------
-
-my($luksFormatStatus) = formatLuksDevice($containerPath, $keyPath, $cipher, $keySize);
-if ($luksFormatStatus == 0) {
-    print "luksFormatStatus: " . "OK" . "\n";
+if (formatLuksDevice($containerPath, $keyPath, $cipher, $keySize)) {
+    $log->info("luksFormatStatus: OK");
 }
 
-#------------
-
-my($openLuksDeviceStatus) = openLuksDevice($containerName, $containerPath, $keyPath);
-print "openLuksDeviceStatus: " . "$openLuksDeviceStatus" . "\n";
-
-#------------
+if (openLuksDevice($containerName, $containerPath, $keyPath)) {
+    $log->info("openLuksDeviceStatus: OK");
+}
 
 my $cryptNodeInfo = cryptsetupInfo($containerName);
-print Dumper $cryptNodeInfo;
-print $cryptNodeInfo->{"$containerName"}{"mapperPath"};
-#------------
+#print Dumper $cryptNodeInfo;
+#print $cryptNodeInfo->{"$containerName"}{"mapperPath"};
 
-my($createFsDeviceStatus) = createFsDevice("reiserfs", $cryptNodeInfo->{$containerName}{"mapperPath"});
-if ($createFsDeviceStatus == 0) {
-    $log->info("createFsDeviceStatus: " . "OK");
+if (createFsDevice("reiserfs", $cryptNodeInfo->{$containerName}{"mapperPath"})) {
+    $log->info("createFsDeviceStatus: OK");
 }
 
 my $mountPoint = $mountPrivateFolder . "/" . $containerName;
 if ( ! -d $mountPoint ) { 
-    my @created = make_path($mountPoint, {verbose => 1, mode => 0700});
-    $log->info("create folder keys: $mountPoint");
-} 
-my($mountFSstatus) = mountFsDevice($cryptNodeInfo->{$containerName}{"mapperPath"}, $mountPoint);
-if ($mountFSstatus == 0) {
+    make_path($mountPoint, {verbose => 0, mode => 0700});
+    $log->info("create mount point: $mountPoint");
+}
+
+if (mountFsDevice($cryptNodeInfo->{$containerName}{"mapperPath"}, $mountPoint)) {
     $log->info("mountFSstatus: OK");
 }

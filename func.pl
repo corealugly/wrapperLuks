@@ -53,18 +53,20 @@ sub createStructDirV2() {
     $containerPrivateFolder = $homeDir . "/.private";
     $mountPrivateFolder = $homeDir . "/private";
 
+    $log->info("-- Create folder structure --");
     if (! -d $keyFolder ) { 
         my @created = make_path($keyFolder, {  verbose => 0, mode => 0700 });
         $log->info("create folder keys: $keyFolder");
-    }
+    } else { $log->info("folder of keys is exist: $keyFolder"); }
     if (! -d $containerPrivateFolder ) {
         my @created = make_path($containerPrivateFolder, { verbose => 0, mode => 0700 });
         $log->info("create folder containers: $containerPrivateFolder ");
-    }
+    } else { $log->info("folder of containers is exist: $containerPrivateFolder "); }
     if (! -d $mountPrivateFolder ) { 
         my @created = make_path($mountPrivateFolder, { verbose => 0, mode => 0700 });
         $log->info("create folder private: $mountPrivateFolder");
-    }
+    } else { $log->info("private folder is exist: $mountPrivateFolder"); }
+    $log->info("---------------------------");
     return($keyFolder, $containerPrivateFolder, $mountPrivateFolder);
 }
 # }}}
@@ -118,9 +120,11 @@ sub createFileContainer($$$;$) {
     if ( -d $containerPrivateFolder ) {
         my $containerPath = $containerPrivateFolder . "/" . $containerName . ".crt";
         $containerPath =~ s/\/\//\//g;
-        print "containerPath: " . $containerPath . "\n";
         if ( ! -e $containerPath ) { 
+            $log->info("-- Create container --");
             my @outPut = `dd if=/dev/urandom of=$containerPath bs=$bs count=$containerSize status=progress`;
+            $log->info("containerPath: $containerPath");
+            $log->info("---------------------------");
             #print Dumper \@outPut;
             return $containerPath;
         } else { 
@@ -129,7 +133,7 @@ sub createFileContainer($$$;$) {
           }
     } else { 
         $log->error("containerPrivateFolder not exist: $containerPrivateFolder"); }
-        return -1;
+        return false;
 }
 # }}}
 
@@ -140,9 +144,11 @@ sub createKeyFile($$$) {
     if ( -d $keyFolder ) {
         my $keyPath = $keyFolder . "/" . $containerName . ".key";
         $keyPath =~ s/\/\//\//g;
-        print "keyPath: " . $keyPath . "\n";
         if ( ! -e $keyPath ) { 
+            $log->info("-- Create key --");
             my @outPut = `dd if=/dev/urandom of=$keyPath bs=${keySize} count=1 status=progress`;
+            $log->info("keyPath: $keyPath");
+            $log->info("---------------------------");
             #print Dumper \@outPut;
             return $keyPath;
         } else { 
@@ -165,14 +171,14 @@ sub formatLuksDevice($$$$) {
         if ( -e $keyPath ) { 
             my @outPut = `env cryptsetup luksFormat $containerPath -d $keyPath -c $cipher -s $keySize --batch-mode`;
             #print Dumper \@outPut;
-            return $?;
+            if (! $?) { return true; } else { return false; }  
         } else { 
             $log->error("keyPath not exist: $keyPath");
-            return -1;
+            return false;
           }
     } else { 
         $log->error("containerPath not exist: $containerPath");
-        return -1;
+        return false;
       }
 }
 # }}}
@@ -219,14 +225,14 @@ sub openLuksDevice($$$) {
         if ( -e $keyPath ) { 
             #my($containerName, $directories, $suffix) = fileparse($containerPath);
             my @outPut = `cryptsetup luksOpen $containerPath -d $keyPath  $containerName`;
-            return $?;
+            if (! $?) { return true; } else { return false; }  
         } else { 
             $log->error("keyPath not exist: $keyPath");
-            return -1;
+            return false;
         }
     } else { 
         $log->error("containerPath not exist: $containerPath");
-        return -1;
+        return false;
     }
 }
 # }}}
@@ -244,14 +250,14 @@ sub createFsDevice($$) {
         $fsComm = $fsHash{$fsName};
         if ( defined $fsComm) { 
             my @outPut = `env $fsComm $pathDevice`;
-            return $?;
+            if (! $?) { return true; } else { return false; }  
         } else { 
             $log->error("fs not exist: $fsComm");
-            return -1;
+            return false;
         }
     } else { 
         $log->error("device not exist: $pathDevice");
-        return -1;
+        return false;
     }
 }
 # }}}
@@ -266,16 +272,19 @@ sub mountFsDevice($$;$) {
              @outPut = `env mount $pathDevice $mountPoint`;
             if ( $? == 0 and defined $userName) {
                 @outPut = `chown -hR $userName:$userName $mountPoint`;
-                return $?;
+                #for inverting bash exit to perl exit status 
+                if (! $?) { return true; } else { return false; }  
+                #return $?;
             }
-            return $?;
+            if (! $?) { return true; } else { return false; }
+            #return $?;
         } else { 
             $log->error("mount point not exist: $mountPoint");
-            return -1;
+            return false;
         }
     } else { 
         $log->error("device not exist: $pathDevice");
-        return -1;
+        return false;
     }
 }
 # }}}
